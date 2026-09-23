@@ -1,5 +1,5 @@
 -- =====================================================
---  mourazx optimizer - Rayfield Custom Red Edition
+--  mourazx optimizer - Rayfield Custom Red
 --  Created by @mourazx_
 -- =====================================================
 
@@ -29,7 +29,6 @@ local Window = Rayfield:CreateWindow({
         ElementTitle = Color3.fromRGB(255, 255, 255),
         SecondaryElementTitle = Color3.fromRGB(200, 200, 200),
         
-        -- Chaves de destaque totalmente vermelhas
         Accent = Color3.fromRGB(255, 30, 30),
         Outline = Color3.fromRGB(255, 30, 30)
     }
@@ -178,7 +177,7 @@ OptiTab:CreateButton({
 })
 
 -- =====================================================
---  LOGIC & OVERRIDES (FORÇA VERMELHO E BOTAO MINIMIZAR)
+--  LOGIC & OVERRIDES
 -- =====================================================
 
 local stretchConnection = nil
@@ -202,7 +201,6 @@ task.spawn(function()
     pcall(function()
         local gui = game:GetService("CoreGui"):FindFirstChild("Rayfield") or game:GetService("Players").LocalPlayer.PlayerGui:FindFirstChild("Rayfield")
         if gui then
-            -- 1. Varredura para substituir o azul pelo vermelho
             for _, v in pairs(gui:GetDescendants()) do
                 if v:IsA("Frame") or v:IsA("TextButton") or v:IsA("ImageLabel") then
                     local color = v.BackgroundColor3
@@ -218,7 +216,6 @@ task.spawn(function()
                 end
             end
 
-            -- 2. Alterar ação do botão Minimizar para fechar/destruir o menu diretamente
             for _, btn in pairs(gui:GetDescendants()) do
                 if btn:IsA("ImageButton") or btn:IsA("TextButton") then
                     if btn.Name:lower():match("minimize") or btn.Name:lower():match("hide") then
@@ -232,10 +229,24 @@ task.spawn(function()
     end)
 end)
 
+-- =====================================================
+--  NOTIFICAÇÃO AO EXECUTAR O SCRIPT
+-- =====================================================
+
 Rayfield:Notify({
-    Title = "mourazx optimizer",
-    Content = "Criado por @mourazx_",
-    Duration = 6,
+    Title = "Blox Fruits Community",
+    Content = "Comunidade de Blox Fruits & Otimizacao:\nhttps://discord.gg/BgDrtUVtZw",
+    Duration = 8,
+    Actions = {
+        Ignore = {
+            Name = "Copiar Link",
+            Callback = function()
+                if setclipboard then
+                    setclipboard("https://discord.gg/BgDrtUVtZw")
+                end
+            end
+        }
+    }
 })
 
 print("mourazx optimizer Loaded")

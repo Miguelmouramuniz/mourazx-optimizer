@@ -100,10 +100,7 @@ local function ApplyStretch()
     getgenv().StretchConn = true
 end
 
-local UltraFPSBackup = {}
-local UltraFPSApplied = false
 local OptimizationRunning = false
-local GraphicsQualityBackup
 
 local function BeginOptimization()
     if OptimizationRunning then
@@ -120,7 +117,6 @@ local function EndOptimization()
 end
 
 local function YieldWithinBudget(started)
-    -- Aproximadamente 2 ms de trabalho por frame; o restante fica para o próximo frame.
     if os.clock() - started >= 0.002 then
         RunService.Heartbeat:Wait()
         return os.clock()
@@ -129,123 +125,68 @@ local function YieldWithinBudget(started)
     return started
 end
 
-local function Backup(object, property)
-    UltraFPSBackup[object] = UltraFPSBackup[object] or {}
+local PotatoBackup = {}
+local PotatoActive = false
+local PotatoQualityBackup
 
-    if UltraFPSBackup[object][property] == nil then
+local function PotatoSave(object, property)
+    PotatoBackup[object] = PotatoBackup[object] or {}
+
+    if PotatoBackup[object][property] == nil then
         local ok, value = pcall(function()
             return object[property]
         end)
 
         if ok then
-            UltraFPSBackup[object][property] = value
+            PotatoBackup[object][property] = value
         end
     end
 end
 
-local function ApplyUltraFPS()
-    if UltraFPSApplied or not BeginOptimization() then
+local function ApplyPotatoGraphics()
+    if PotatoActive or not BeginOptimization() then
         return
     end
 
     task.defer(function()
         local ok, errorMessage = pcall(function()
-            local Lighting = game:GetService("Lighting")
-            local Terrain = workspace:FindFirstChildOfClass("Terrain")
+            pcall(function()
+                local settings = UserSettings():GetService("UserGameSettings")
+                PotatoQualityBackup = settings.SavedQualityLevel
+                settings.SavedQualityLevel = Enum.SavedQualitySetting.QualityLevel1
+            end)
+
+            local lighting = game:GetService("Lighting")
+            lighting.GlobalShadows = false
+            lighting.FogStart = 0
+            lighting.FogEnd = 9e9
+            lighting.Technology = Enum.Technology.Compatibility
+
             local started = os.clock()
 
-            -- Reduz somente a qualidade gráfica local, quando o ambiente permitir.
-            pcall(function()
-                local userGameSettings = UserSettings():GetService("UserGameSettings")
-                GraphicsQualityBackup = userGameSettings.SavedQualityLevel
-                userGameSettings.SavedQualityLevel = Enum.SavedQualitySetting.QualityLevel1
-            end)
-
-            pcall(function()
-                Backup(Lighting, "GlobalShadows")
-                Lighting.GlobalShadows = false
-                Backup(Lighting, "FogEnd")
-                Lighting.FogEnd = 9e9
-                Backup(Lighting, "FogStart")
-                Lighting.FogStart = 0
-                -- Não alteramos Lighting.Technology durante a partida: essa troca
-                -- pode recompilar shaders e causar uma queda temporária de FPS.
-                Backup(Lighting, "EnvironmentDiffuseScale")
-                Lighting.EnvironmentDiffuseScale = 0
-                Backup(Lighting, "EnvironmentSpecularScale")
-                Lighting.EnvironmentSpecularScale = 0
-            end)
-
-            if Terrain then
+            -- O Potato reúne o Anti-Lag normal e aplica uma camada extra nas
+            -- texturas. Tudo é feito em microetapas para evitar congelamento.
+            for _, object in ipairs(game:GetDescendants()) do
                 pcall(function()
-                    Backup(Terrain, "Decoration")
-                    Terrain.Decoration = false
-                    Backup(Terrain, "WaterWaveSize")
-                    Terrain.WaterWaveSize = 0
-                    Backup(Terrain, "WaterWaveSpeed")
-                    Terrain.WaterWaveSpeed = 0
-                    Backup(Terrain, "WaterReflectance")
-                    Terrain.WaterReflectance = 0
-                end)
-            end
-
-            started = YieldWithinBudget(started)
-
-            -- Modo seguro: não modifica materiais, MeshParts ou BaseParts.
-            -- A sombra global já foi desligada em Lighting; percorrer cada peça
-            -- para alterar CastShadow causaria outra queda brusca de FPS.
-            local effectObjects = {}
-
-            for _, object in ipairs(Lighting:GetDescendants()) do
-                table.insert(effectObjects, object)
-            end
-
-            for _, object in ipairs(workspace:GetDescendants()) do
-                if object:IsA("Decal")
-                    or object:IsA("Texture")
-                    or object:IsA("ParticleEmitter")
-                    or object:IsA("Trail")
-                    or object:IsA("Beam")
-                    or object:IsA("Smoke")
-                    or object:IsA("Fire")
-                    or object:IsA("Sparkles")
-                    or object:IsA("PostEffect")
-                    or object:IsA("Atmosphere")
-                    or object:IsA("Clouds") then
-                    table.insert(effectObjects, object)
-                end
-
-                -- Também limita a própria busca; GetDescendants pode retornar
-                -- dezenas de milhares de instâncias em mapas grandes.
-                started = YieldWithinBudget(started)
-            end
-
-            for _, object in ipairs(effectObjects) do
-                pcall(function()
-                    if object:IsA("Decal") or object:IsA("Texture") then
-                        -- Oculta a textura sem destruí-la; pode ser restaurada.
-                        Backup(object, "Transparency")
+                    if object:IsA("BasePart") then
+                        object.Material = Enum.Material.SmoothPlastic
+                        object.Reflectance = 0
+                    elseif object:IsA("Decal") or object:IsA("Texture") then
+                        PotatoSave(object, "Transparency")
                         object.Transparency = 1
                     elseif object:IsA("ParticleEmitter")
                         or object:IsA("Trail")
-                        or object:IsA("Beam")
                         or object:IsA("Smoke")
                         or object:IsA("Fire")
                         or object:IsA("Sparkles")
                         or object:IsA("PostEffect") then
-                        Backup(object, "Enabled")
                         object.Enabled = false
                     elseif object:IsA("Atmosphere") then
-                        Backup(object, "Density")
                         object.Density = 0
-                        Backup(object, "Haze")
                         object.Haze = 0
-                        Backup(object, "Glare")
                         object.Glare = 0
                     elseif object:IsA("Clouds") then
-                        Backup(object, "Cover")
                         object.Cover = 0
-                        Backup(object, "Density")
                         object.Density = 0
                     end
                 end)
@@ -254,26 +195,26 @@ local function ApplyUltraFPS()
             end
         end)
 
-        UltraFPSApplied = ok
+        PotatoActive = ok
         EndOptimization()
 
         if ok then
-            Notify("Ultra FPS ativado gradualmente, sem travar o jogo.", 5)
+            Notify("Potato Graphics ativado gradualmente.", 5)
         else
-            Notify("Ultra FPS interrompido: " .. tostring(errorMessage), 5)
+            Notify("Potato Graphics interrompido: " .. tostring(errorMessage), 5)
         end
     end)
 end
 
-local function RestoreUltraFPS()
-    if not UltraFPSApplied or not BeginOptimization() then
+local function RestorePotatoGraphics()
+    if not PotatoActive or not BeginOptimization() then
         return
     end
 
     task.defer(function()
         local started = os.clock()
 
-        for object, properties in pairs(UltraFPSBackup) do
+        for object, properties in pairs(PotatoBackup) do
             for property, value in pairs(properties) do
                 pcall(function()
                     object[property] = value
@@ -282,18 +223,18 @@ local function RestoreUltraFPS()
             end
         end
 
-        if GraphicsQualityBackup then
+        if PotatoQualityBackup then
             pcall(function()
-                local userGameSettings = UserSettings():GetService("UserGameSettings")
-                userGameSettings.SavedQualityLevel = GraphicsQualityBackup
+                local settings = UserSettings():GetService("UserGameSettings")
+                settings.SavedQualityLevel = PotatoQualityBackup
             end)
-            GraphicsQualityBackup = nil
+            PotatoQualityBackup = nil
         end
 
-        UltraFPSBackup = {}
-        UltraFPSApplied = false
+        PotatoBackup = {}
+        PotatoActive = false
         EndOptimization()
-        Notify("Configurações visuais restauradas gradualmente.", 4)
+        Notify("Potato Graphics restaurado.", 4)
     end)
 end
 
@@ -342,31 +283,46 @@ local function CreateFPSCounter()
 
     local frame = Instance.new("Frame")
     frame.Name = "FPSFrame"
-    frame.Size = UDim2.fromOffset(145, 42)
+    frame.Size = UDim2.fromOffset(176, 52)
     frame.Position = UDim2.new(0, 18, 0, 120)
-    frame.BackgroundColor3 = Color3.fromRGB(20, 20, 24)
-    frame.BackgroundTransparency = 0.12
+    frame.BackgroundColor3 = Color3.fromRGB(18, 28, 20)
+    frame.BackgroundTransparency = 0.04
     frame.BorderSizePixel = 0
     frame.Active = true
     frame.Parent = FPSGui
 
     local corner = Instance.new("UICorner")
-    corner.CornerRadius = UDim.new(0, 8)
+    corner.CornerRadius = UDim.new(0, 4)
     corner.Parent = frame
 
+    local gradient = Instance.new("UIGradient")
+    gradient.Color = ColorSequence.new({
+        ColorSequenceKeypoint.new(0, Color3.fromRGB(34, 58, 38)),
+        ColorSequenceKeypoint.new(1, Color3.fromRGB(13, 20, 15)),
+    })
+    gradient.Rotation = 90
+    gradient.Parent = frame
+
     local stroke = Instance.new("UIStroke")
-    stroke.Color = Color3.fromRGB(220, 45, 55)
-    stroke.Thickness = 1
-    stroke.Transparency = 0.15
+    stroke.Color = Color3.fromRGB(105, 230, 105)
+    stroke.Thickness = 2
+    stroke.Transparency = 0
     stroke.Parent = frame
 
     FPSLabel = Instance.new("TextLabel")
-    FPSLabel.Size = UDim2.fromScale(1, 1)
+    FPSLabel.Position = UDim2.fromOffset(12, 4)
+    FPSLabel.Size = UDim2.new(1, -24, 1, -8)
     FPSLabel.BackgroundTransparency = 1
-    FPSLabel.Font = Enum.Font.GothamBold
-    FPSLabel.TextSize = 15
-    FPSLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
-    FPSLabel.Text = "FPS: --"
+    -- Arcade é a fonte pixelada mais próxima do estilo Minecraft disponível
+    -- nativamente no Roblox, sem depender de asset externo.
+    FPSLabel.Font = Enum.Font.Arcade
+    FPSLabel.TextSize = 19
+    FPSLabel.TextXAlignment = Enum.TextXAlignment.Left
+    FPSLabel.TextYAlignment = Enum.TextYAlignment.Center
+    FPSLabel.TextColor3 = Color3.fromRGB(120, 255, 120)
+    FPSLabel.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
+    FPSLabel.TextStrokeTransparency = 0.35
+    FPSLabel.Text = "FPS  --"
     FPSLabel.Parent = frame
 
     -- Arraste por mouse ou toque, sem bloquear os demais controles do jogo.
@@ -421,7 +377,7 @@ local function CreateFPSCounter()
                 and Color3.fromRGB(255, 190, 70)
                 or Color3.fromRGB(255, 80, 80)
 
-            FPSLabel.Text = "FPS: " .. tostring(fps)
+            FPSLabel.Text = "FPS  " .. tostring(fps)
             FPSLabel.TextColor3 = color
             frames = 0
             elapsed = 0
@@ -527,6 +483,22 @@ OptiTab:Button({
 })
 
 OptiTab:Button({
+    Title = "Apply Potato Graphics",
+    Desc = "Anti-Lag mais forte com texturas 2D reduzidas",
+    Callback = function()
+        ApplyPotatoGraphics()
+    end,
+})
+
+OptiTab:Button({
+    Title = "Restore Potato Textures",
+    Desc = "Restaura texturas e qualidade gráfica do Potato",
+    Callback = function()
+        RestorePotatoGraphics()
+    end,
+})
+
+OptiTab:Button({
     Title = "Apply Native FPS Boost",
     Desc = "Remove partículas, sombras e texturas pesadas",
     Callback = function()
@@ -542,8 +514,29 @@ OptiTab:Button({
                 local started = os.clock()
 
                 Lighting.GlobalShadows = false
+                Lighting.FogStart = 0
                 Lighting.FogEnd = 9e9
                 Lighting.Technology = Enum.Technology.Compatibility
+
+                -- Remove fontes de neblina que não dependem apenas de FogEnd.
+                for _, effect in ipairs(Lighting:GetDescendants()) do
+                    if effect:IsA("Atmosphere") then
+                        effect.Density = 0
+                        effect.Haze = 0
+                        effect.Glare = 0
+                    elseif effect:IsA("Clouds") then
+                        effect.Cover = 0
+                        effect.Density = 0
+                    end
+                end
+
+                -- Alguns executores oferecem setfpscap; em outros, esta etapa
+                -- é ignorada e o Anti-Lag segue funcionando normalmente.
+                if type(setfpscap) == "function" then
+                    pcall(function()
+                        setfpscap(90)
+                    end)
+                end
 
                 for _, object in ipairs(game:GetDescendants()) do
                     pcall(function()
@@ -576,21 +569,6 @@ OptiTab:Button({
     end,
 })
 
-OptiTab:Button({
-    Title = "Apply Ultra FPS Boost",
-    Desc = "Renderização leve: fog, iluminação, sombras e texturas",
-    Callback = function()
-        ApplyUltraFPS()
-    end,
-})
-
-OptiTab:Button({
-    Title = "Restore Visual Settings",
-    Desc = "Desfaz somente as alterações do Ultra FPS",
-    Callback = function()
-        RestoreUltraFPS()
-    end,
-})
 
 OptiTab:Button({
     Title = "Copy Discord Link",

@@ -102,6 +102,31 @@ end
 
 local UltraFPSBackup = {}
 local UltraFPSApplied = false
+local OptimizationRunning = false
+
+local function BeginOptimization()
+    if OptimizationRunning then
+        Notify("Uma otimização já está em andamento.", 3)
+        return false
+    end
+
+    OptimizationRunning = true
+    return true
+end
+
+local function EndOptimization()
+    OptimizationRunning = false
+end
+
+local function YieldWithinBudget(started)
+    -- Aproximadamente 2 ms de trabalho por frame; o restante fica para o próximo frame.
+    if os.clock() - started >= 0.002 then
+        RunService.Heartbeat:Wait()
+        return os.clock()
+    end
+
+    return started
+end
 
 local function Backup(object, property)
     UltraFPSBackup[object] = UltraFPSBackup[object] or {}
@@ -118,117 +143,123 @@ local function Backup(object, property)
 end
 
 local function ApplyUltraFPS()
-    if UltraFPSApplied then
+    if UltraFPSApplied or not BeginOptimization() then
         return
     end
 
-    UltraFPSApplied = true
-
     task.defer(function()
-        local Lighting = game:GetService("Lighting")
-        local Terrain = workspace:FindFirstChildOfClass("Terrain")
+        local ok, errorMessage = pcall(function()
+            local Lighting = game:GetService("Lighting")
+            local Terrain = workspace:FindFirstChildOfClass("Terrain")
+            local started = os.clock()
 
-        pcall(function()
-            Backup(Lighting, "GlobalShadows")
-            Lighting.GlobalShadows = false
+            pcall(function()
+                Backup(Lighting, "GlobalShadows")
+                Lighting.GlobalShadows = false
+                Backup(Lighting, "FogEnd")
+                Lighting.FogEnd = 9e9
+                Backup(Lighting, "FogStart")
+                Lighting.FogStart = 0
+                Backup(Lighting, "Technology")
+                Lighting.Technology = Enum.Technology.Compatibility
+                Backup(Lighting, "EnvironmentDiffuseScale")
+                Lighting.EnvironmentDiffuseScale = 0
+                Backup(Lighting, "EnvironmentSpecularScale")
+                Lighting.EnvironmentSpecularScale = 0
+            end)
 
-            Backup(Lighting, "FogEnd")
-            Lighting.FogEnd = 9e9
+            if Terrain then
+                pcall(function()
+                    Backup(Terrain, "Decoration")
+                    Terrain.Decoration = false
+                    Backup(Terrain, "WaterWaveSize")
+                    Terrain.WaterWaveSize = 0
+                    Backup(Terrain, "WaterWaveSpeed")
+                    Terrain.WaterWaveSpeed = 0
+                    Backup(Terrain, "WaterReflectance")
+                    Terrain.WaterReflectance = 0
+                end)
+            end
 
-            Backup(Lighting, "FogStart")
-            Lighting.FogStart = 0
+            started = YieldWithinBudget(started)
 
-            Backup(Lighting, "Technology")
-            Lighting.Technology = Enum.Technology.Compatibility
+            for _, object in ipairs(game:GetDescendants()) do
+                pcall(function()
+                    if object:IsA("BasePart") then
+                        Backup(object, "CastShadow")
+                        object.CastShadow = false
+                        Backup(object, "Material")
+                        object.Material = Enum.Material.SmoothPlastic
+                        Backup(object, "Reflectance")
+                        object.Reflectance = 0
+                    end
 
-            Backup(Lighting, "EnvironmentDiffuseScale")
-            Lighting.EnvironmentDiffuseScale = 0
+                    if object:IsA("MeshPart") then
+                        Backup(object, "RenderFidelity")
+                        object.RenderFidelity = Enum.RenderFidelity.Performance
+                    end
 
-            Backup(Lighting, "EnvironmentSpecularScale")
-            Lighting.EnvironmentSpecularScale = 0
+                    if object:IsA("ParticleEmitter")
+                        or object:IsA("Trail")
+                        or object:IsA("Beam")
+                        or object:IsA("Smoke")
+                        or object:IsA("Fire")
+                        or object:IsA("Sparkles")
+                        or object:IsA("PostEffect") then
+                        Backup(object, "Enabled")
+                        object.Enabled = false
+                    elseif object:IsA("Atmosphere") then
+                        Backup(object, "Density")
+                        object.Density = 0
+                        Backup(object, "Haze")
+                        object.Haze = 0
+                        Backup(object, "Glare")
+                        object.Glare = 0
+                    elseif object:IsA("Clouds") then
+                        Backup(object, "Cover")
+                        object.Cover = 0
+                        Backup(object, "Density")
+                        object.Density = 0
+                    end
+                end)
+
+                started = YieldWithinBudget(started)
+            end
         end)
 
-        if Terrain then
-            pcall(function()
-                Backup(Terrain, "Decoration")
-                Terrain.Decoration = false
+        UltraFPSApplied = ok
+        EndOptimization()
 
-                Backup(Terrain, "WaterWaveSize")
-                Terrain.WaterWaveSize = 0
-
-                Backup(Terrain, "WaterWaveSpeed")
-                Terrain.WaterWaveSpeed = 0
-
-                Backup(Terrain, "WaterReflectance")
-                Terrain.WaterReflectance = 0
-            end)
+        if ok then
+            Notify("Ultra FPS ativado gradualmente, sem travar o jogo.", 5)
+        else
+            Notify("Ultra FPS interrompido: " .. tostring(errorMessage), 5)
         end
-
-        local descendants = game:GetDescendants()
-
-        for index, object in ipairs(descendants) do
-            pcall(function()
-                if object:IsA("BasePart") then
-                    Backup(object, "CastShadow")
-                    object.CastShadow = false
-
-                    Backup(object, "Material")
-                    object.Material = Enum.Material.SmoothPlastic
-
-                    Backup(object, "Reflectance")
-                    object.Reflectance = 0
-                end
-
-                if object:IsA("MeshPart") then
-                    Backup(object, "RenderFidelity")
-                    object.RenderFidelity = Enum.RenderFidelity.Performance
-                end
-
-                if object:IsA("ParticleEmitter")
-                    or object:IsA("Trail")
-                    or object:IsA("Beam")
-                    or object:IsA("Smoke")
-                    or object:IsA("Fire")
-                    or object:IsA("Sparkles")
-                    or object:IsA("PostEffect") then
-                    Backup(object, "Enabled")
-                    object.Enabled = false
-                elseif object:IsA("Atmosphere") then
-                    Backup(object, "Density")
-                    object.Density = 0
-                    Backup(object, "Haze")
-                    object.Haze = 0
-                    Backup(object, "Glare")
-                    object.Glare = 0
-                elseif object:IsA("Clouds") then
-                    Backup(object, "Cover")
-                    object.Cover = 0
-                    Backup(object, "Density")
-                    object.Density = 0
-                end
-            end)
-
-            if index % 150 == 0 then
-                task.wait()
-            end
-        end
-
-        Notify("Ultra FPS ativado: iluminação, fog, sombras e efeitos reduzidos.", 5)
     end)
 end
 
 local function RestoreUltraFPS()
-    for object, properties in pairs(UltraFPSBackup) do
-        for property, value in pairs(properties) do
-            pcall(function()
-                object[property] = value
-            end)
-        end
+    if not UltraFPSApplied or not BeginOptimization() then
+        return
     end
 
-    UltraFPSBackup = {}
-    UltraFPSApplied = false
-    Notify("Configurações visuais restauradas.", 4)
+    task.defer(function()
+        local started = os.clock()
+
+        for object, properties in pairs(UltraFPSBackup) do
+            for property, value in pairs(properties) do
+                pcall(function()
+                    object[property] = value
+                end)
+                started = YieldWithinBudget(started)
+            end
+        end
+
+        UltraFPSBackup = {}
+        UltraFPSApplied = false
+        EndOptimization()
+        Notify("Configurações visuais restauradas gradualmente.", 4)
+    end)
 end
 
 local FPSGui
@@ -464,36 +495,48 @@ OptiTab:Button({
     Title = "Apply Native FPS Boost",
     Desc = "Remove partículas, sombras e texturas pesadas",
     Callback = function()
+        if not BeginOptimization() then
+            return
+        end
+
         Notify("Otimizando gráficos e texturas...", 3)
 
         task.defer(function()
-            local Lighting = game:GetService("Lighting")
-            Lighting.GlobalShadows = false
-            Lighting.FogEnd = 9e9
-            Lighting.Technology = Enum.Technology.Compatibility
+            local ok, errorMessage = pcall(function()
+                local Lighting = game:GetService("Lighting")
+                local started = os.clock()
 
-            for index, object in ipairs(game:GetDescendants()) do
-                pcall(function()
-                    if object:IsA("BasePart") then
-                        object.Material = Enum.Material.SmoothPlastic
-                        object.Reflectance = 0
-                    elseif object:IsA("ParticleEmitter")
-                        or object:IsA("Trail")
-                        or object:IsA("Smoke")
-                        or object:IsA("Fire")
-                        or object:IsA("Sparkles") then
-                        object.Enabled = false
-                    elseif object:IsA("PostEffect") then
-                        object.Enabled = false
-                    end
-                end)
+                Lighting.GlobalShadows = false
+                Lighting.FogEnd = 9e9
+                Lighting.Technology = Enum.Technology.Compatibility
 
-                if index % 150 == 0 then
-                    task.wait()
+                for _, object in ipairs(game:GetDescendants()) do
+                    pcall(function()
+                        if object:IsA("BasePart") then
+                            object.Material = Enum.Material.SmoothPlastic
+                            object.Reflectance = 0
+                        elseif object:IsA("ParticleEmitter")
+                            or object:IsA("Trail")
+                            or object:IsA("Smoke")
+                            or object:IsA("Fire")
+                            or object:IsA("Sparkles") then
+                            object.Enabled = false
+                        elseif object:IsA("PostEffect") then
+                            object.Enabled = false
+                        end
+                    end)
+
+                    started = YieldWithinBudget(started)
                 end
-            end
+            end)
 
-            Notify("Jogo otimizado com sucesso!\n:by @mourazx_", 5)
+            EndOptimization()
+
+            if ok then
+                Notify("Jogo otimizado gradualmente com sucesso!", 5)
+            else
+                Notify("Otimização interrompida: " .. tostring(errorMessage), 5)
+            end
         end)
     end,
 })

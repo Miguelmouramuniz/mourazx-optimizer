@@ -40,6 +40,12 @@ do
     redTheme.Checkbox = Color3.fromRGB(220, 45, 55)
     redTheme.Slider = Color3.fromRGB(220, 45, 55)
     redTheme.Primary = Color3.fromRGB(220, 45, 55)
+    redTheme.Accent = Color3.fromRGB(12, 12, 15)
+    redTheme.Button = Color3.fromRGB(150, 25, 35)
+    redTheme.ElementBackground = Color3.fromRGB(18, 18, 22)
+    redTheme.Background = Color3.fromRGB(7, 7, 10)
+    redTheme.PanelBackground = Color3.fromRGB(8, 8, 11)
+    redTheme.Icon = Color3.fromRGB(255, 95, 100)
 
     WindUI:AddTheme(redTheme)
     WindUI:SetTheme("MourazxRed")
@@ -162,6 +168,50 @@ local function ApplyPotatoGraphics()
             lighting.FogEnd = 9e9
             lighting.Technology = Enum.Technology.Compatibility
 
+            -- Blox Fruits: reduz o custo do céu sem destruir o objeto Sky.
+            -- As propriedades são salvas para o botão de restauração.
+            for _, object in ipairs(lighting:GetChildren()) do
+                if object:IsA("Sky") then
+                    for _, property in ipairs({
+                        "SkyboxBk", "SkyboxDn", "SkyboxFt",
+                        "SkyboxLf", "SkyboxRt", "SkyboxUp",
+                        "CelestialBodiesShown", "StarCount",
+                    }) do
+                        PotatoSave(object, property)
+                    end
+
+                    pcall(function()
+                        object.SkyboxBk = ""
+                        object.SkyboxDn = ""
+                        object.SkyboxFt = ""
+                        object.SkyboxLf = ""
+                        object.SkyboxRt = ""
+                        object.SkyboxUp = ""
+                        object.CelestialBodiesShown = false
+                        object.StarCount = 0
+                    end)
+                end
+            end
+
+            -- Reduz o custo visual do oceano/água do Terrain.
+            local terrain = workspace:FindFirstChildOfClass("Terrain")
+            if terrain then
+                pcall(function()
+                    for _, property in ipairs({
+                        "WaterTransparency", "WaterReflectance",
+                        "WaterWaveSize", "WaterWaveSpeed", "Decoration",
+                    }) do
+                        PotatoSave(terrain, property)
+                    end
+
+                    terrain.WaterTransparency = 1
+                    terrain.WaterReflectance = 0
+                    terrain.WaterWaveSize = 0
+                    terrain.WaterWaveSpeed = 0
+                    terrain.Decoration = false
+                end)
+            end
+
             local started = os.clock()
 
             -- O Potato reúne o Anti-Lag normal e aplica uma camada extra nas
@@ -283,82 +333,28 @@ local function CreateFPSCounter()
 
     local frame = Instance.new("Frame")
     frame.Name = "FPSFrame"
-    frame.Size = UDim2.fromOffset(176, 52)
-    frame.Position = UDim2.new(0, 18, 0, 120)
-    frame.BackgroundColor3 = Color3.fromRGB(18, 28, 20)
-    frame.BackgroundTransparency = 0.04
+    frame.Size = UDim2.fromOffset(130, 34)
+    frame.Position = UDim2.new(1, -18, 0, 18)
+    frame.AnchorPoint = Vector2.new(1, 0)
+    frame.BackgroundTransparency = 1
     frame.BorderSizePixel = 0
-    frame.Active = true
+    frame.Active = false
     frame.Parent = FPSGui
 
-    local corner = Instance.new("UICorner")
-    corner.CornerRadius = UDim.new(0, 4)
-    corner.Parent = frame
-
-    local gradient = Instance.new("UIGradient")
-    gradient.Color = ColorSequence.new({
-        ColorSequenceKeypoint.new(0, Color3.fromRGB(34, 58, 38)),
-        ColorSequenceKeypoint.new(1, Color3.fromRGB(13, 20, 15)),
-    })
-    gradient.Rotation = 90
-    gradient.Parent = frame
-
-    local stroke = Instance.new("UIStroke")
-    stroke.Color = Color3.fromRGB(105, 230, 105)
-    stroke.Thickness = 2
-    stroke.Transparency = 0
-    stroke.Parent = frame
-
     FPSLabel = Instance.new("TextLabel")
-    FPSLabel.Position = UDim2.fromOffset(12, 4)
-    FPSLabel.Size = UDim2.new(1, -24, 1, -8)
+    FPSLabel.Size = UDim2.fromScale(1, 1)
     FPSLabel.BackgroundTransparency = 1
     -- Arcade é a fonte pixelada mais próxima do estilo Minecraft disponível
     -- nativamente no Roblox, sem depender de asset externo.
     FPSLabel.Font = Enum.Font.Arcade
-    FPSLabel.TextSize = 19
-    FPSLabel.TextXAlignment = Enum.TextXAlignment.Left
+    FPSLabel.TextSize = 21
+    FPSLabel.TextXAlignment = Enum.TextXAlignment.Right
     FPSLabel.TextYAlignment = Enum.TextYAlignment.Center
-    FPSLabel.TextColor3 = Color3.fromRGB(120, 255, 120)
+    FPSLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
     FPSLabel.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
-    FPSLabel.TextStrokeTransparency = 0.35
+    FPSLabel.TextStrokeTransparency = 0
     FPSLabel.Text = "FPS  --"
     FPSLabel.Parent = frame
-
-    -- Arraste por mouse ou toque, sem bloquear os demais controles do jogo.
-    frame.InputBegan:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1
-            or input.UserInputType == Enum.UserInputType.Touch then
-            FPSDragging = true
-            FPSDragStart = input.Position
-            FPSStartPosition = frame.Position
-        end
-    end)
-
-    frame.InputEnded:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1
-            or input.UserInputType == Enum.UserInputType.Touch then
-            FPSDragging = false
-        end
-    end)
-
-    local UserInputService = game:GetService("UserInputService")
-    FPSInputChangedConnection = UserInputService.InputChanged:Connect(function(input)
-        if not FPSDragging then
-            return
-        end
-
-        if input.UserInputType == Enum.UserInputType.MouseMovement
-            or input.UserInputType == Enum.UserInputType.Touch then
-            local delta = input.Position - FPSDragStart
-            frame.Position = UDim2.new(
-                FPSStartPosition.X.Scale,
-                FPSStartPosition.X.Offset + delta.X,
-                FPSStartPosition.Y.Scale,
-                FPSStartPosition.Y.Offset + delta.Y
-            )
-        end
-    end)
 
     local frames = 0
     local elapsed = 0
@@ -371,14 +367,9 @@ local function CreateFPSCounter()
     FPSUpdateConnection = RunService.Heartbeat:Connect(function()
         if elapsed >= 0.25 and FPSLabel then
             local fps = math.floor((frames / elapsed) + 0.5)
-            local color = fps >= 40
-                and Color3.fromRGB(80, 220, 120)
-                or fps >= 25
-                and Color3.fromRGB(255, 190, 70)
-                or Color3.fromRGB(255, 80, 80)
 
             FPSLabel.Text = "FPS  " .. tostring(fps)
-            FPSLabel.TextColor3 = color
+            FPSLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
             frames = 0
             elapsed = 0
         end

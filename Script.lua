@@ -1,145 +1,173 @@
 -- =====================================================
---  mourazx optimizer - Rayfield Custom Red
---  Created by @mourazx_
+-- mourazx optimizer - versão corrigida
 -- =====================================================
 
-local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
+local WINDUI_URL = "https://raw.githubusercontent.com/Footagesus/WindUI/main/dist/main.lua"
+local STRETCH_BIND_NAME = "MourazxCameraStretch"
 
-local Window = Rayfield:CreateWindow({
-    Name = "mourazx optimizer",
-    LoadingTitle = "mourazx optimizer",
-    LoadingSubtitle = "by @mourazx_",
-    Theme = "Red",
-    ConfigurationSaving = {
-        Enabled = false
-    },
-    CustomTheme = {
-        TextColor = Color3.fromRGB(240, 240, 240),
-        Background = Color3.fromRGB(25, 25, 25),
-        Topbar = Color3.fromRGB(35, 35, 35),
-        Shadow = Color3.fromRGB(15, 15, 15),
-        NotificationBackground = Color3.fromRGB(20, 20, 20),
-        NotificationActionsBackground = Color3.fromRGB(255, 30, 30),
-        TabBackground = Color3.fromRGB(40, 40, 40),
-        TabTextColor = Color3.fromRGB(230, 230, 230),
-        SelectedTabTextColor = Color3.fromRGB(255, 255, 255),
-        ElementBackground = Color3.fromRGB(35, 35, 35),
-        ElementBackgroundHover = Color3.fromRGB(45, 45, 45),
-        SecondaryElementBackground = Color3.fromRGB(25, 25, 25),
-        ElementTitle = Color3.fromRGB(255, 255, 255),
-        SecondaryElementTitle = Color3.fromRGB(200, 200, 200),
-        
-        Accent = Color3.fromRGB(255, 30, 30),
-        Outline = Color3.fromRGB(255, 30, 30)
-    }
-})
+local WindUISource = game:HttpGet(WINDUI_URL)
+local WindUILoader = loadstring(WindUISource)
+assert(WindUILoader, "Não foi possível carregar o WindUI.")
+local WindUI = WindUILoader()
+assert(WindUI, "O WindUI retornou nil.")
 
--- Abas sem emojis
-local MainTab = Window:CreateTab("Main", nil)
-local OptiTab = Window:CreateTab("Optimization", nil)
+local StarterGui = game:GetService("StarterGui")
+local RunService = game:GetService("RunService")
 
--- =====================================================
---  MAIN TAB (STRETCHED SCREEN)
--- =====================================================
+local DISCORD_LINK = "https://discord.gg/BgDrtUVtZw"
 
-MainTab:CreateSection("Stretch Settings")
-
-MainTab:CreateToggle({
-    Name = "Enable Stretched Screen",
-    CurrentValue = true,
-    Callback = function(Value)
-        getgenv().StretchEnabled = Value
-        if Value then ApplyStretch() else
-            if getgenv().StretchConn then getgenv().StretchConn:Disconnect() end
-        end
-    end,
-})
-
-MainTab:CreateSlider({
-    Name = "Stretch Intensity",
-    Range = {0.5, 1.2},
-    Increment = 0.01,
-    CurrentValue = 0.75,
-    Callback = function(Value)
-        getgenv().StretchIntensity = Value
-        if getgenv().StretchEnabled then ApplyStretch() end
-    end,
-})
-
-MainTab:CreateSection("Performance Options")
-
-MainTab:CreateToggle({
-    Name = "Disable Particles",
-    Callback = function(Value)
-        for _, v in pairs(workspace:GetDescendants()) do
-            if v:IsA("ParticleEmitter") or v:IsA("Trail") or v:IsA("Beam") or v:IsA("Smoke") or v:IsA("Fire") then
-                v.Enabled = not Value
-            end
-        end
-    end,
-})
-
-MainTab:CreateToggle({
-    Name = "Disable Shadows",
-    Callback = function(Value)
-        game:GetService("Lighting").GlobalShadows = not Value
-    end,
-})
-
-MainTab:CreateToggle({
-    Name = "Low Texture Quality",
-    Callback = function(Value)
-        settings().Rendering.QualityLevel = Value and Enum.QualityLevel.Level01 or Enum.QualityLevel.Automatic
-    end,
-})
-
-MainTab:CreateToggle({
-    Name = "Remove Textures (Plastic Only)",
-    Callback = function(Value)
-        pcall(function()
-            for _, obj in pairs(workspace:GetDescendants()) do
-                if obj:IsA("Texture") or obj:IsA("Decal") or obj:IsA("SurfaceAppearance") then
-                    obj.Transparency = Value and 1 or 0
-                    obj.Visible = not Value
-                elseif obj:IsA("BasePart") or obj:IsA("MeshPart") or obj:IsA("Part") then
-                    if Value then
-                        obj.Material = Enum.Material.Plastic
-                    end
-                end
-            end
-
-            for _, plr in pairs(game.Players:GetPlayers()) do
-                if plr.Character then
-                    for _, obj in pairs(plr.Character:GetDescendants()) do
-                        if obj:IsA("Texture") or obj:IsA("Decal") or obj:IsA("SurfaceAppearance") then
-                            obj.Transparency = Value and 1 or 0
-                            obj.Visible = not Value
-                        elseif obj:IsA("BasePart") or obj:IsA("MeshPart") then
-                            if Value then
-                                obj.Material = Enum.Material.Plastic
-                            end
-                        end
-                    end
-                end
-            end
-        end)
-    end,
-})
-
--- =====================================================
---  OPTIMIZATION TAB
--- =====================================================
-
-OptiTab:CreateSection("Moura Anti-Lag Engine")
-
-OptiTab:CreateButton({
-    Name = "Apply FPS Boost Native (Anti-Freeze)",
-    Callback = function()
-        Rayfield:Notify({
+local function Notify(text, duration)
+    pcall(function()
+        StarterGui:SetCore("SendNotification", {
             Title = "mourazx optimizer",
-            Content = "Otimizando o jogo de forma suave...",
-            Duration = 3,
+            Text = text,
+            Duration = duration or 4,
         })
+    end)
+end
+
+-- Tema vermelho para a chave dos toggles, checkbox e slider.
+do
+    local darkTheme = WindUI:GetThemes().Dark
+    local redTheme = {}
+
+    for key, value in pairs(darkTheme) do
+        redTheme[key] = value
+    end
+
+    redTheme.Name = "MourazxRed"
+    redTheme.Toggle = Color3.fromRGB(220, 45, 55)
+    redTheme.Checkbox = Color3.fromRGB(220, 45, 55)
+    redTheme.Slider = Color3.fromRGB(220, 45, 55)
+    redTheme.Primary = Color3.fromRGB(220, 45, 55)
+
+    WindUI:AddTheme(redTheme)
+    WindUI:SetTheme("MourazxRed")
+end
+
+Notify("Comunidade Blox Fruits & Otimização:\n" .. DISCORD_LINK, 6)
+
+if type(setclipboard) == "function" then
+    pcall(function()
+        setclipboard(DISCORD_LINK)
+    end)
+end
+
+getgenv().StretchEnabled = false
+getgenv().StretchIntensity = 0.75
+
+local function StopStretch()
+    pcall(function()
+        RunService:UnbindFromRenderStep(STRETCH_BIND_NAME)
+    end)
+
+    getgenv().StretchConn = nil
+end
+
+local function ApplyStretch()
+    -- Evita criar vários binds quando o usuário liga/desliga a função.
+    StopStretch()
+
+    RunService:BindToRenderStep(
+        STRETCH_BIND_NAME,
+        Enum.RenderPriority.Camera.Value + 1,
+        function()
+            local camera = workspace.CurrentCamera
+
+            if not getgenv().StretchEnabled or not camera then
+                return
+            end
+
+            local intensity = math.clamp(
+                tonumber(getgenv().StretchIntensity) or 0.75,
+                0.50,
+                1.20
+            )
+
+            -- O CFrame original é restaurado antes de aplicar a nova intensidade.
+            -- Assim o slider não acumula a distorção a cada frame.
+            local original = camera.CFrame
+
+            camera.CFrame = original * CFrame.new(
+                0, 0, 0,
+                1, 0, 0,
+                0, intensity, 0,
+                0, 0, 1
+            )
+        end
+    )
+
+    getgenv().StretchConn = true
+end
+
+local Window = WindUI:CreateWindow({
+    Title = "mourazx optimizer",
+    Author = ":by @mourazx_",
+    Folder = "MourazxOptimizer",
+    Size = UDim2.fromOffset(500, 340),
+    Transparent = false,
+    Theme = "MourazxRed",
+    Draggable = true,
+})
+
+local MainTab = Window:Tab({
+    Title = "Screen",
+    Icon = "monitor",
+})
+
+local OptiTab = Window:Tab({
+    Title = "Optimization",
+    Icon = "zap",
+})
+
+-- =====================================================
+-- ABA SCREEN
+-- =====================================================
+MainTab:Section({
+    Title = "Stretched Screen Settings",
+})
+
+MainTab:Toggle({
+    Title = "Enable Stretched Screen",
+    Desc = "Ativa a resolução de tela esticada",
+    Value = false,
+    Callback = function(value)
+        getgenv().StretchEnabled = value
+
+        if value then
+            ApplyStretch()
+        else
+            StopStretch()
+        end
+    end,
+})
+
+MainTab:Slider({
+    Title = "Stretch Intensity",
+    Desc = "Ajusta a intensidade da tela esticada",
+    Value = {
+        Min = 50,
+        Max = 120,
+        Default = 75,
+    },
+    Step = 1,
+    Callback = function(value)
+        getgenv().StretchIntensity = tonumber(value) / 100
+    end,
+})
+
+-- =====================================================
+-- ABA OPTIMIZATION
+-- =====================================================
+OptiTab:Section({
+    Title = "Moura Anti-Lag Engine",
+})
+
+OptiTab:Button({
+    Title = "Apply Native FPS Boost",
+    Desc = "Remove partículas, sombras e texturas pesadas",
+    Callback = function()
+        Notify("Otimizando gráficos e texturas...", 3)
 
         task.defer(function()
             local Lighting = game:GetService("Lighting")
@@ -147,106 +175,55 @@ OptiTab:CreateButton({
             Lighting.FogEnd = 9e9
             Lighting.Technology = Enum.Technology.Compatibility
 
-            local descendants = game:GetDescendants()
-            for i, v in ipairs(descendants) do
+            for index, object in ipairs(game:GetDescendants()) do
                 pcall(function()
-                    if v:IsA("BasePart") then
-                        v.Material = Enum.Material.SmoothPlastic
-                        v.Reflectance = 0
-                    elseif v:IsA("Decal") or v:IsA("Texture") then
-                        v:Destroy()
-                    elseif v:IsA("ParticleEmitter") or v:IsA("Trail") or v:IsA("Smoke") or v:IsA("Fire") or v:IsA("Sparkles") then
-                        v.Enabled = false
-                    elseif v:IsA("PostEffect") then
-                        v.Enabled = false
+                    if object:IsA("BasePart") then
+                        object.Material = Enum.Material.SmoothPlastic
+                        object.Reflectance = 0
+                    elseif object:IsA("ParticleEmitter")
+                        or object:IsA("Trail")
+                        or object:IsA("Smoke")
+                        or object:IsA("Fire")
+                        or object:IsA("Sparkles") then
+                        object.Enabled = false
+                    elseif object:IsA("PostEffect") then
+                        object.Enabled = false
                     end
                 end)
 
-                if i % 150 == 0 then
+                if index % 150 == 0 then
                     task.wait()
                 end
             end
 
-            Rayfield:Notify({
-                Title = "mourazx optimizer",
-                Content = "Jogo otimizado com sucesso! Criado por @mourazx_",
-                Duration = 5,
-            })
+            Notify("Jogo otimizado com sucesso!\n:by @mourazx_", 5)
         end)
     end,
 })
 
--- =====================================================
---  LOGIC & OVERRIDES
--- =====================================================
+OptiTab:Button({
+    Title = "Copy Discord Link",
+    Desc = "Copia o convite da comunidade",
+    Callback = function()
+        if type(setclipboard) == "function" then
+            local copied = pcall(function()
+                setclipboard(DISCORD_LINK)
+            end)
 
-local stretchConnection = nil
-function ApplyStretch()
-    if stretchConnection then stretchConnection:Disconnect() end
-    stretchConnection = game:GetService("RunService").RenderStepped:Connect(function()
-        if getgenv().StretchEnabled and workspace.CurrentCamera then
-            local cam = workspace.CurrentCamera
-            cam.CFrame = cam.CFrame * CFrame.new(0, 0, 0, 1, 0, 0, 0, getgenv().StretchIntensity or 0.75, 0, 0, 0, 1)
+            if copied then
+                Notify("Link do Discord copiado!", 4)
+            else
+                Notify("Não foi possível copiar o link.", 4)
+            end
+        else
+            Notify("Clipboard não suportado neste executor.", 4)
         end
-    end)
-end
-
-getgenv().StretchEnabled = true
-getgenv().StretchIntensity = 0.75
-ApplyStretch()
-
--- Força a troca de cores azuis do Rayfield para Vermelho e altera o botão de Minimizar
-task.spawn(function()
-    task.wait(1)
-    pcall(function()
-        local gui = game:GetService("CoreGui"):FindFirstChild("Rayfield") or game:GetService("Players").LocalPlayer.PlayerGui:FindFirstChild("Rayfield")
-        if gui then
-            for _, v in pairs(gui:GetDescendants()) do
-                if v:IsA("Frame") or v:IsA("TextButton") or v:IsA("ImageLabel") then
-                    local color = v.BackgroundColor3
-                    if color.B > color.R and color.B > 0.3 then
-                        v.BackgroundColor3 = Color3.fromRGB(255, 30, 30)
-                    end
-                end
-                if v:IsA("UIStroke") then
-                    local strokeColor = v.Color
-                    if strokeColor.B > strokeColor.R and strokeColor.B > 0.3 then
-                        v.Color = Color3.fromRGB(255, 30, 30)
-                    end
-                end
-            end
-
-            for _, btn in pairs(gui:GetDescendants()) do
-                if btn:IsA("ImageButton") or btn:IsA("TextButton") then
-                    if btn.Name:lower():match("minimize") or btn.Name:lower():match("hide") then
-                        btn.MouseButton1Click:Connect(function()
-                            gui:Destroy()
-                        end)
-                    end
-                end
-            end
-        end
-    end)
-end)
-
--- =====================================================
---  NOTIFICAÇÃO AO EXECUTAR O SCRIPT
--- =====================================================
-
-Rayfield:Notify({
-    Title = "Blox Fruits Community",
-    Content = "Comunidade de Blox Fruits & Otimizacao:\nhttps://discord.gg/BgDrtUVtZw",
-    Duration = 8,
-    Actions = {
-        Ignore = {
-            Name = "Copiar Link",
-            Callback = function()
-                if setclipboard then
-                    setclipboard("https://discord.gg/BgDrtUVtZw")
-                end
-            end
-        }
-    }
+    end,
 })
 
-print("mourazx optimizer Loaded")
+-- Garante que a janela abra diretamente na aba Screen.
+task.defer(function()
+    -- Nesta versão do WindUI, Window:SelectTab espera o índice da aba,
+    -- enquanto a própria aba já expõe o método correto: :Select().
+    MainTab:Select()
+end)

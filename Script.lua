@@ -103,6 +103,7 @@ end
 local UltraFPSBackup = {}
 local UltraFPSApplied = false
 local OptimizationRunning = false
+local GraphicsQualityBackup
 
 local function BeginOptimization()
     if OptimizationRunning then
@@ -153,6 +154,13 @@ local function ApplyUltraFPS()
             local Terrain = workspace:FindFirstChildOfClass("Terrain")
             local started = os.clock()
 
+            -- Reduz somente a qualidade gráfica local, quando o ambiente permitir.
+            pcall(function()
+                local userGameSettings = UserSettings():GetService("UserGameSettings")
+                GraphicsQualityBackup = userGameSettings.SavedQualityLevel
+                userGameSettings.SavedQualityLevel = Enum.SavedQualitySetting.QualityLevel1
+            end)
+
             pcall(function()
                 Backup(Lighting, "GlobalShadows")
                 Lighting.GlobalShadows = false
@@ -160,8 +168,8 @@ local function ApplyUltraFPS()
                 Lighting.FogEnd = 9e9
                 Backup(Lighting, "FogStart")
                 Lighting.FogStart = 0
-                Backup(Lighting, "Technology")
-                Lighting.Technology = Enum.Technology.Compatibility
+                -- Não alteramos Lighting.Technology durante a partida: essa troca
+                -- pode recompilar shaders e causar uma queda temporária de FPS.
                 Backup(Lighting, "EnvironmentDiffuseScale")
                 Lighting.EnvironmentDiffuseScale = 0
                 Backup(Lighting, "EnvironmentSpecularScale")
@@ -183,23 +191,42 @@ local function ApplyUltraFPS()
 
             started = YieldWithinBudget(started)
 
-            for _, object in ipairs(game:GetDescendants()) do
+            -- Modo seguro: não modifica materiais, MeshParts ou BaseParts.
+            -- A sombra global já foi desligada em Lighting; percorrer cada peça
+            -- para alterar CastShadow causaria outra queda brusca de FPS.
+            local effectObjects = {}
+
+            for _, object in ipairs(Lighting:GetDescendants()) do
+                table.insert(effectObjects, object)
+            end
+
+            for _, object in ipairs(workspace:GetDescendants()) do
+                if object:IsA("Decal")
+                    or object:IsA("Texture")
+                    or object:IsA("ParticleEmitter")
+                    or object:IsA("Trail")
+                    or object:IsA("Beam")
+                    or object:IsA("Smoke")
+                    or object:IsA("Fire")
+                    or object:IsA("Sparkles")
+                    or object:IsA("PostEffect")
+                    or object:IsA("Atmosphere")
+                    or object:IsA("Clouds") then
+                    table.insert(effectObjects, object)
+                end
+
+                -- Também limita a própria busca; GetDescendants pode retornar
+                -- dezenas de milhares de instâncias em mapas grandes.
+                started = YieldWithinBudget(started)
+            end
+
+            for _, object in ipairs(effectObjects) do
                 pcall(function()
-                    if object:IsA("BasePart") then
-                        Backup(object, "CastShadow")
-                        object.CastShadow = false
-                        Backup(object, "Material")
-                        object.Material = Enum.Material.SmoothPlastic
-                        Backup(object, "Reflectance")
-                        object.Reflectance = 0
-                    end
-
-                    if object:IsA("MeshPart") then
-                        Backup(object, "RenderFidelity")
-                        object.RenderFidelity = Enum.RenderFidelity.Performance
-                    end
-
-                    if object:IsA("ParticleEmitter")
+                    if object:IsA("Decal") or object:IsA("Texture") then
+                        -- Oculta a textura sem destruí-la; pode ser restaurada.
+                        Backup(object, "Transparency")
+                        object.Transparency = 1
+                    elseif object:IsA("ParticleEmitter")
                         or object:IsA("Trail")
                         or object:IsA("Beam")
                         or object:IsA("Smoke")
@@ -253,6 +280,14 @@ local function RestoreUltraFPS()
                 end)
                 started = YieldWithinBudget(started)
             end
+        end
+
+        if GraphicsQualityBackup then
+            pcall(function()
+                local userGameSettings = UserSettings():GetService("UserGameSettings")
+                userGameSettings.SavedQualityLevel = GraphicsQualityBackup
+            end)
+            GraphicsQualityBackup = nil
         end
 
         UltraFPSBackup = {}
@@ -543,7 +578,7 @@ OptiTab:Button({
 
 OptiTab:Button({
     Title = "Apply Ultra FPS Boost",
-    Desc = "Modo agressivo: remove fog, sombras, nuvens, água e efeitos",
+    Desc = "Renderização leve: fog, iluminação, sombras e texturas",
     Callback = function()
         ApplyUltraFPS()
     end,

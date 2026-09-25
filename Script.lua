@@ -41,6 +41,7 @@ do
     redTheme.Slider = Color3.fromRGB(220, 45, 55)
     redTheme.Primary = Color3.fromRGB(220, 45, 55)
     redTheme.Accent = Color3.fromRGB(12, 12, 15)
+    redTheme.Outline = Color3.fromRGB(0, 0, 0)
     redTheme.Button = Color3.fromRGB(150, 25, 35)
     redTheme.ElementBackground = Color3.fromRGB(18, 18, 22)
     redTheme.Background = Color3.fromRGB(7, 7, 10)
@@ -131,6 +132,102 @@ local function YieldWithinBudget(started)
     return started
 end
 
+local CombatFXBackup = {}
+local CombatFXActive = false
+
+local function IsCombatEffect(object)
+    local names = {}
+    local current = object
+
+    -- Verifica o efeito e alguns ancestrais para encontrar VFX nomeados
+    -- como haki, aura, skill ou ataque sem tocar na interface do jogador.
+    for _ = 1, 4 do
+        if not current then
+            break
+        end
+
+        table.insert(names, string.lower(current.Name))
+        current = current.Parent
+    end
+
+    local combinedName = table.concat(names, " ")
+    local keywords = {
+        "haki", "buso", "armament", "aura", "combat", "attack",
+        "skill", "ability", "vfx", "effect", "hit", "slash",
+        "explosion", "impact", "damage", "sword", "fighting",
+    }
+
+    for _, keyword in ipairs(keywords) do
+        if string.find(combinedName, keyword, 1, true) then
+            return true
+        end
+    end
+
+    return false
+end
+
+local function CleanCombatEffects()
+    if CombatFXActive or not BeginOptimization() then
+        return
+    end
+
+    task.defer(function()
+        local ok, errorMessage = pcall(function()
+            local started = os.clock()
+
+            for _, object in ipairs(workspace:GetDescendants()) do
+                local supported = object:IsA("ParticleEmitter")
+                    or object:IsA("Trail")
+                    or object:IsA("Beam")
+                    or object:IsA("Smoke")
+                    or object:IsA("Fire")
+                    or object:IsA("Sparkles")
+                    or object:IsA("Highlight")
+
+                if supported and IsCombatEffect(object) then
+                    pcall(function()
+                        CombatFXBackup[object] = object.Enabled
+                        object.Enabled = false
+                    end)
+                end
+
+                started = YieldWithinBudget(started)
+            end
+        end)
+
+        CombatFXActive = ok
+        EndOptimization()
+
+        if ok then
+            Notify("Efeitos de combate e Buso Haki reduzidos.", 5)
+        else
+            Notify("Limpeza PvP interrompida: " .. tostring(errorMessage), 5)
+        end
+    end)
+end
+
+local function RestoreCombatEffects()
+    if not CombatFXActive or not BeginOptimization() then
+        return
+    end
+
+    task.defer(function()
+        local started = os.clock()
+
+        for object, enabled in pairs(CombatFXBackup) do
+            pcall(function()
+                object.Enabled = enabled
+            end)
+            started = YieldWithinBudget(started)
+        end
+
+        CombatFXBackup = {}
+        CombatFXActive = false
+        EndOptimization()
+        Notify("Efeitos de combate restaurados.", 4)
+    end)
+end
+
 local PotatoBackup = {}
 local PotatoActive = false
 local PotatoQualityBackup
@@ -219,8 +316,12 @@ local function ApplyPotatoGraphics()
             for _, object in ipairs(game:GetDescendants()) do
                 pcall(function()
                     if object:IsA("BasePart") then
+                        PotatoSave(object, "Material")
+                        PotatoSave(object, "Reflectance")
+                        PotatoSave(object, "CastShadow")
                         object.Material = Enum.Material.SmoothPlastic
                         object.Reflectance = 0
+                        object.CastShadow = false
                     elseif object:IsA("Decal") or object:IsA("Texture") then
                         PotatoSave(object, "Transparency")
                         object.Transparency = 1
@@ -334,7 +435,7 @@ local function CreateFPSCounter()
     local frame = Instance.new("Frame")
     frame.Name = "FPSFrame"
     frame.Size = UDim2.fromOffset(130, 34)
-    frame.Position = UDim2.new(1, -18, 0, 18)
+    frame.Position = UDim2.new(1, -108, 0, 18)
     frame.AnchorPoint = Vector2.new(1, 0)
     frame.BackgroundTransparency = 1
     frame.BorderSizePixel = 0
@@ -490,6 +591,22 @@ OptiTab:Button({
 })
 
 OptiTab:Button({
+    Title = "Clean PvP Combat Effects",
+    Desc = "Desativa partículas de combate, aura e Buso Haki",
+    Callback = function()
+        CleanCombatEffects()
+    end,
+})
+
+OptiTab:Button({
+    Title = "Restore PvP Effects",
+    Desc = "Restaura os efeitos de combate desativados",
+    Callback = function()
+        RestoreCombatEffects()
+    end,
+})
+
+OptiTab:Button({
     Title = "Apply Native FPS Boost",
     Desc = "Remove partículas, sombras e texturas pesadas",
     Callback = function()
@@ -546,44 +663,4 @@ OptiTab:Button({
                     end)
 
                     started = YieldWithinBudget(started)
-                end
-            end)
-
-            EndOptimization()
-
-            if ok then
-                Notify("Jogo otimizado gradualmente com sucesso!", 5)
-            else
-                Notify("Otimização interrompida: " .. tostring(errorMessage), 5)
-            end
-        end)
-    end,
-})
-
-
-OptiTab:Button({
-    Title = "Copy Discord Link",
-    Desc = "Copia o convite da comunidade",
-    Callback = function()
-        if type(setclipboard) == "function" then
-            local copied = pcall(function()
-                setclipboard(DISCORD_LINK)
-            end)
-
-            if copied then
-                Notify("Link do Discord copiado!", 4)
-            else
-                Notify("Não foi possível copiar o link.", 4)
-            end
-        else
-            Notify("Clipboard não suportado neste executor.", 4)
-        end
-    end,
-})
-
--- Garante que a janela abra diretamente na aba Screen.
-task.defer(function()
-    -- Nesta versão do WindUI, Window:SelectTab espera o índice da aba,
-    -- enquanto a própria aba já expõe o método correto: :Select().
-    MainTab:Select()
-end)
+                en
